@@ -269,7 +269,7 @@ void view_all_orders(void) {
             char time_buf[20];
             strftime(time_buf, 20, "%H:%M:%S",
                      localtime(&orders[i].order_time));
-            printf("%-4d | %-8s | %-15s (%d) | 대기   | [VIP] | %s (최우선 처리)\n",
+            printf("%-4d | %-8s | %-12s (%d) | 대기   | [VIP]  | %s (최우선 처리)\n",
                    orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,time_buf);
         }
     }
@@ -280,7 +280,7 @@ void view_all_orders(void) {
             char time_buf[20];
             strftime(time_buf, 20, "%H:%M:%S",
                      localtime(&orders[i].order_time));
-            printf("%-4d | %-8s | %-15s (%d) | 대기   |        | %s\n",
+            printf("%-4d | %-8s | %-12s (%d) | 대기   |        | %s\n",
                    orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,time_buf);
         }
     }
@@ -292,7 +292,7 @@ void view_all_orders(void) {
             strftime(time_buf, 20, "%H:%M:%S",
                      localtime(&orders[i].order_time));
             const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
-            printf("%-4d | %-8s | %-15s (%d) | 완료   | %-6s | %s\n",
+            printf("%-4d | %-8s | %-12s (%d) | 완료   | %-6s | %s\n",
                    orders[i].id, orders[i].customer_code, orders[i].item_name, orders[i].quantity, vip_tag, time_buf);
         }
     }
