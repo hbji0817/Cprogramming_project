@@ -26,6 +26,12 @@ void remove_newline(char* str) {
     }
 }
 
+const char* get_status_string(int status) {
+    if (status == STATUS_PENDING) return "대기";
+    if (status == STATUS_PREPARING) return "준비 중";
+    return "완료";
+}
+
 // ----------------------------------------------------
 // 영속성 함수 (메뉴 데이터 포함)
 // ----------------------------------------------------
@@ -524,6 +530,8 @@ void add_order(const char* customer_code) {
 // 내 주문 조회
 void view_orders(const char* customer_code) {
     printf("\n[내 주문 조회 - 코드: %s]\n", customer_code);
+    check_and_update_status(); 
+    
     printf("--------------------------------------------------------------------\n");
     int found = 0;
 
@@ -533,11 +541,20 @@ void view_orders(const char* customer_code) {
             char time_buf[20];
             strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
 
+            const char* status_str;
+            if (orders[i].status == STATUS_PENDING) {
+                status_str = "대기";
+            } else if (orders[i].status == STATUS_PREPARING) {
+                status_str = "준비 중";
+            } else {
+                status_str = "완료";
+            }
+
             const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
-            const char* priority_info = (orders[i].is_vip_order && orders[i].status == STATUS_PENDING) ? "(최우선)" : "";
+            const char* priority_info = (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) ? "(최우선)" : "";
 
             printf("ID: %d | 메뉴: %s | 수량: %d | 상태: %s %s | 시간: %s %s\n",
-                   orders[i].id, orders[i].item_name, orders[i].quantity, orders[i].status == STATUS_PENDING ? "대기" : "완료", vip_tag, time_buf, priority_info);
+                   orders[i].id, orders[i].item_name, orders[i].quantity, status_str, vip_tag, time_buf, priority_info);
         }
     }
     if (!found) {
@@ -549,6 +566,9 @@ void view_orders(const char* customer_code) {
 // 전체 주문 조회 (직원용)
 void view_all_orders(void) {
     printf("\n[전체 주문 조회]\n");
+    
+    check_and_update_status(); 
+
     if (order_count == 0) {
         printf("전체 주문 내역이 없습니다.\n");
         return;
@@ -558,25 +578,33 @@ void view_all_orders(void) {
     printf("ID   | 고객코드 | 메뉴 (수량)      | 상태   | 태그   | 주문 시간\n");
     printf("-----|----------|------------------|--------|--------|--------------------\n");
 
-    // 1. VIP 대기 주문
+    // 1. VIP 대기 및 준비 중 주문 (최우선)
     for (int i = 0; i < order_count; i++) {
-        if (orders[i].status == STATUS_PENDING && orders[i].is_vip_order) {
+        // VIP 주문 중 완료되지 않은 주문
+        if (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
             char time_buf[20];
             strftime(time_buf, 20, "%H:%M:%S",
                      localtime(&orders[i].order_time));
-            printf("%-4d | %-8s | %-12s (%d) | 대기   | [VIP]  | %s (최우선 처리)\n",
-                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,time_buf);
+            
+            const char* status_str = get_status_string(orders[i].status);
+            
+            printf("%-4d | %-8s | %-12s (%d) | %-6s | [VIP]  | %s (최우선 처리)\n",
+                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
         }
     }
 
-    // 2. 일반 대기 주문 (시간 순으로 정렬하는 것이 이상적이지만 단순화를 위해 그대로 출력)
+    // 2. 일반 대기 및 준비 중 주문
     for (int i = 0; i < order_count; i++) {
-        if (orders[i].status == STATUS_PENDING && !orders[i].is_vip_order) {
+        // 일반 고객 주문 중 완료되지 않은 주문
+        if (!orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
             char time_buf[20];
             strftime(time_buf, 20, "%H:%M:%S",
                      localtime(&orders[i].order_time));
-            printf("%-4d | %-8s | %-12s (%d) | 대기   |        | %s\n",
-                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,time_buf);
+            
+            const char* status_str = get_status_string(orders[i].status);
+            
+            printf("%-4d | %-8s | %-12s (%d) | %-6s |        | %s\n",
+                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
         }
     }
 
@@ -641,3 +669,25 @@ void delete_all_orders(void) {
     }
 }
 
+void check_and_update_status(void) {
+    time_t current_time = time(NULL);
+    int updated_count = 0;
+
+    for (int i = 0; i < order_count; i++) {
+        // 1. 대기(Pending) 상태인지 확인
+        if (orders[i].status == STATUS_PENDING) {
+            
+            // 2. 주문 시각으로부터 30초가 경과했는지 확인
+            if (current_time - orders[i].order_time >= PREP_DELAY_SECONDS) {
+                
+                // 3. 상태를 준비 중(Preparing)으로 변경
+                orders[i].status = STATUS_PREPARING;
+                updated_count++;
+            }
+        }
+    }
+
+    if (updated_count > 0) {
+        save_data();
+    }
+}

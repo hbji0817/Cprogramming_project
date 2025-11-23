@@ -19,6 +19,8 @@
 // 주문 상태 정의
 #define STATUS_PENDING  0
 #define STATUS_COMPLETE 1
+#define STATUS_PREPARING 2
+#define PREP_DELAY_SECONDS 30
 
 // 메뉴 정보 구조체 추가
 typedef struct {
@@ -67,6 +69,8 @@ void view_all_orders(void);
 void mark_order_complete(void);
 void remove_newline(char* str);
 void delete_all_orders(void);
+void check_and_update_status(void);
+const char* get_status_string(int status);
 
 // 고객 시스템
 int  find_customer_index_by_code(const char* code);
