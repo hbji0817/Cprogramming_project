@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "delievery_system.h"
+#include "delivery_system.h"
 
 int main(void) {
     char input_code[20];
@@ -34,7 +34,7 @@ int main(void) {
         } else if (strlen(input_code) > 0) {
             customer_menu(input_code);
         } else {
-            printf("\n[오류] 코드를 입력해야 합니다.\n");
+            printf("\n코드를 입력해야 합니다.\n");
         }
     }
 

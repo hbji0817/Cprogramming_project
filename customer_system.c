@@ -1,7 +1,7 @@
 // customer_system.c
 #include <stdio.h>
 #include <string.h>
-#include "delievery_system.h"
+#include "delivery_system.h"
 
 // 고객 코드로 customers 배열 인덱스 찾기
 int find_customer_index_by_code(const char* code) {
@@ -20,10 +20,8 @@ void add_new_customer(const char* code) {
     }
 
     if (find_customer_index_by_code(code) == -1) {
-        strncpy(customers[active_customer_count].customer_code, code,
-                sizeof(customers[active_customer_count].customer_code) - 1);
-        customers[active_customer_count]
-            .customer_code[sizeof(customers[active_customer_count].customer_code) - 1] = '\0';
+        strncpy(customers[active_customer_count].customer_code, code, sizeof(customers[active_customer_count].customer_code) - 1);
+        customers[active_customer_count].customer_code[sizeof(customers[active_customer_count].customer_code) - 1] = '\0';
 
         customers[active_customer_count].visit_count = 0;
         customers[active_customer_count].is_vip = 0;
