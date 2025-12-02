@@ -7,6 +7,8 @@
 #include "delivery_system.h"
 
 
+// ================== 전역 변수 ==================
+
 Order orders[MAX_ORDERS];
 int order_count = 0;
 int next_order_id = 1;
@@ -14,11 +16,14 @@ int next_order_id = 1;
 Customer customers[MAX_CUSTOMERS];
 int active_customer_count = 0;
 
-MenuItem menu_items[MAX_MENU_ITEMS]; // 메뉴 항목 배열
-int menu_count = 0;                  // 현재 메뉴 항목 수
+MenuItem menu_items[MAX_MENU_ITEMS]; // 메뉴 배열
+int menu_count = 0;                  // 메뉴 개수
 int next_menu_id = 1;                // 다음 메뉴 ID
 
-// 보조 함수
+
+// ================== 유틸 함수 ==================
+
+ // 문자열 끝의 개행 문자 제거
 void remove_newline(char* str) {
     size_t len = strlen(str);
     if (len > 0 && str[len - 1] == '\n') {
@@ -26,16 +31,17 @@ void remove_newline(char* str) {
     }
 }
 
+// 주문 상태를 문자열로 변환
 const char* get_status_string(int status) {
     if (status == STATUS_PENDING) return "대기";
     if (status == STATUS_PREPARING) return "준비 중";
     return "완료";
 }
 
-// ----------------------------------------------------
-// 영속성 함수 (메뉴 데이터 포함)
-// ----------------------------------------------------
 
+// ============ 파일 저장 / 로드 ============
+
+// 메뉴 데이터를 파일에 저장
 void save_menu_data(void) {
     FILE* menu_file = fopen(MENU_FILE_NAME, "wb");
     if (menu_file) {
@@ -50,6 +56,7 @@ void save_menu_data(void) {
     }
 }
 
+// 메뉴 데이터를 파일에서 불러오기
 void load_menu_data(void) {
     FILE* menu_file = fopen(MENU_FILE_NAME, "rb");
     if (menu_file) {
@@ -69,6 +76,7 @@ void load_menu_data(void) {
     }
 }
 
+// 주문, 고객, 메뉴 전체 저장
 void save_data(void) {
     FILE* order_file = fopen(ORDERS_FILE_NAME, "wb");
     if (order_file) {
@@ -93,11 +101,12 @@ void save_data(void) {
         printf("고객 파일 저장에 실패했습니다.\n");
     }
     
-    save_menu_data(); // 메뉴 데이터 저장
+    save_menu_data(); // 메뉴도 함께 저장
 }
 
+// 주문, 고객, 메뉴 전체 로드
 void load_data(void) {
-    load_menu_data(); // 메뉴 데이터 로드
+    load_menu_data(); // 메뉴 먼저 로드
 
     FILE* order_file = fopen(ORDERS_FILE_NAME, "rb");
     if (order_file) {
@@ -133,10 +142,10 @@ void load_data(void) {
     }
 }
 
-// ----------------------------------------------------
-// 고객 시스템 함수
-// ----------------------------------------------------
 
+// ============ 고객 / VIP 관리 ============
+
+// 고객 코드로 고객 인덱스 찾기
 int find_customer_index_by_code(const char* code) {
     for (int i = 0; i < active_customer_count; i++) {
         if (strcmp(customers[i].customer_code, code) == 0) {
@@ -146,46 +155,66 @@ int find_customer_index_by_code(const char* code) {
     return -1;
 }
 
+// 새 고객 추가 (visit_count = 0)
 void add_new_customer(const char* code) {
     if (active_customer_count >= MAX_CUSTOMERS) {
-        printf("최대 고객 수를 초과하여 새 고객을 등록할 수 없습니다.\n");
         return;
     }
-    Customer new_cust;
-    strncpy(new_cust.customer_code, code, sizeof(new_cust.customer_code) - 1);
-    new_cust.customer_code[sizeof(new_cust.customer_code) - 1] = '\0';
-    new_cust.visit_count = 1; // 첫 주문이므로 1로 시작
-    new_cust.is_vip = 0;
-    customers[active_customer_count++] = new_cust;
-    printf("신규 고객 등록: %s\n", code);
+
+    if (find_customer_index_by_code(code) == -1) {
+        strncpy(customers[active_customer_count].customer_code, code, sizeof(customers[active_customer_count].customer_code) - 1);
+        customers[active_customer_count].customer_code[sizeof(customers[active_customer_count].customer_code) - 1] = '\0';
+
+        customers[active_customer_count].visit_count = 0;
+        customers[active_customer_count].is_vip = 0;
+        active_customer_count++;
+
+        save_data();
+    }
 }
 
+// 방문 횟수를 증가시키고 VIP 여부 갱신
 void check_and_promote_vip(const char* customer_code, int order_idx) {
     int cust_idx = find_customer_index_by_code(customer_code);
 
     if (cust_idx == -1) {
         add_new_customer(customer_code);
         cust_idx = find_customer_index_by_code(customer_code);
-    } else {
-        customers[cust_idx].visit_count++;
     }
 
-    // VIP 승격 확인
-    if (customers[cust_idx].visit_count >= VIP && !customers[cust_idx].is_vip) {
-        customers[cust_idx].is_vip = 1;
-        printf("🎉 축하합니다! 고객 코드 %s님이 VIP로 승격되었습니다! 🎉\n", customer_code);
-    }
+    if (cust_idx != -1) {
+        int was_vip = customers[cust_idx].is_vip;
 
-    // 주문에 VIP 여부 표시
-    if (customers[cust_idx].is_vip) {
-        orders[order_idx].is_vip_order = 1;
+        customers[cust_idx].visit_count++; // 방문 +1
+
+        if (customers[cust_idx].visit_count >= VIP) {
+            orders[order_idx].is_vip_order = 1; // 주문에 VIP 표시
+
+            if (was_vip == 0) {
+                // 새로 VIP 됨
+                customers[cust_idx].is_vip = 1;
+                printf("\n********************************************************\n");
+                printf("  [단골 손님으로 승급되셨습니다!]\n");
+                printf("  이 주문부터 VIP 혜택이 적용되어 빠르게 처리됩니다.\n");
+                printf("********************************************************\n");
+            } else {
+                // 이미 VIP
+                printf("단골 고객의 주문입니다. 대기열 최우선 배치가 적용됩니다.\n");
+            }
+        }
+
+        // 변경 사항 있으면 저장
+        if (customers[cust_idx].is_vip != was_vip ||
+            customers[cust_idx].visit_count > 0) {
+            save_data();
+        }
     }
 }
 
-// ----------------------------------------------------
-// 메뉴 관리 함수 (추가됨)
-// ----------------------------------------------------
 
+// ============ 메뉴 관리 ============
+
+// 메뉴 ID로 인덱스 찾기
 int find_menu_index_by_id(int menu_id) {
     for (int i = 0; i < menu_count; i++) {
         if (menu_items[i].menu_id == menu_id) {
@@ -195,6 +224,7 @@ int find_menu_index_by_id(int menu_id) {
     return -1;
 }
 
+// 현재 메뉴 목록 출력
 void print_menu(void) {
     if (menu_count == 0) {
         printf("\n[메뉴 목록] - 메뉴가 등록되지 않았습니다.\n");
@@ -209,6 +239,7 @@ void print_menu(void) {
     printf("-------------------------\n");
 }
 
+// 새 메뉴 추가
 void add_menu_item(void) {
     if (menu_count >= MAX_MENU_ITEMS) {
         printf("더 이상 메뉴를 추가할 수 없습니다 (최대 %d개).\n", MAX_MENU_ITEMS);
@@ -236,6 +267,7 @@ void add_menu_item(void) {
     printf("\n메뉴 '%s' (ID: %d)가 성공적으로 추가되었습니다.\n", new_item.item_name, new_item.menu_id);
 }
 
+// 메뉴 수정 (이름/가격)
 void update_menu_item(void) {
     print_menu();
     if (menu_count == 0) return;
@@ -286,6 +318,7 @@ void update_menu_item(void) {
     printf("\n메뉴 ID %d가 성공적으로 수정되었습니다. (새 이름: %s, 새 가격: %d원)\n", menu_id, item->item_name, item->price);
 }
 
+// 메뉴 삭제
 void delete_menu_item(void) {
     print_menu();
     if (menu_count == 0) return;
@@ -305,7 +338,7 @@ void delete_menu_item(void) {
         return;
     }
 
-    // 삭제: 배열 요소 이동
+    // 삭제 확인
     printf("메뉴 '%s' (ID: %d)를 정말로 삭제하시겠습니까? (yes/no): ", menu_items[idx].item_name, menu_id);
     char confirm[8];
     if (fgets(confirm, sizeof(confirm), stdin) == NULL) {
@@ -315,7 +348,7 @@ void delete_menu_item(void) {
     remove_newline(confirm);
 
     if (strcmp(confirm, "yes") == 0 || strcmp(confirm, "y") == 0) {
-        // 배열에서 삭제
+        // 뒤 요소들을 앞으로 당김
         for (int i = idx; i < menu_count - 1; i++) {
             menu_items[i] = menu_items[i + 1];
         }
@@ -327,6 +360,7 @@ void delete_menu_item(void) {
     }
 }
 
+// 메뉴 관리 메뉴 (직원용)
 void menu_management(void) {
     int choice;
     while (1) {
@@ -364,21 +398,231 @@ void menu_management(void) {
 }
 
 
-// ----------------------------------------------------
-// 주문 시스템 함수
-// ----------------------------------------------------
+// ============ 주문 처리 / 조회 ============
 
-// 메뉴창
+// 새 주문 추가 (고객용)
+void add_order(const char* customer_code) {
+    if (menu_count == 0) {
+        printf("\n현재 주문 가능한 메뉴가 없습니다. 직원에게 문의하세요.\n");
+        return;
+    }
+
+    print_menu(); // 메뉴 보여주기
+
+    int selected_menu_id;
+    printf("주문할 메뉴의 ID 입력: ");
+    if (scanf("%d", &selected_menu_id) != 1) {
+        printf("\n잘못된 입력입니다. 주문 취소.\n");
+        int c; while ((c = getchar()) != '\n' && c != EOF);
+        return;
+    }
+    getchar();
+
+    int menu_idx = find_menu_index_by_id(selected_menu_id);
+    if (menu_idx == -1) {
+        printf("\n해당 ID의 메뉴를 찾을 수 없습니다. 주문 취소.\n");
+        return;
+    }
+
+    if (order_count >= MAX_ORDERS) {
+        printf("\n더 이상 주문을 받을 수 없습니다.\n");
+        return;
+    }
+
+    Order new_order;
+    int   order_idx = order_count;
+
+    // 주문 기본 정보 설정
+    new_order.id = next_order_id++;
+    strncpy(new_order.customer_code, customer_code, sizeof(new_order.customer_code) - 1);
+    new_order.customer_code[sizeof(new_order.customer_code) - 1] = '\0';
+
+    new_order.menu_id = selected_menu_id;
+    strncpy(new_order.item_name, menu_items[menu_idx].item_name, sizeof(new_order.item_name) - 1);
+    new_order.item_name[sizeof(new_order.item_name) - 1] = '\0';
+    
+    printf("선택 메뉴: %s (%d원)\n", new_order.item_name, menu_items[menu_idx].price);
+
+    printf("수량: ");
+    if (scanf("%d", &new_order.quantity) != 1 || new_order.quantity <= 0) {
+        printf("\n잘못된 수량 입력입니다. 주문 취소.\n");
+        next_order_id--;
+        int c; while ((c = getchar()) != '\n' && c != EOF);
+        return;
+    }
+    getchar();
+
+    new_order.status       = STATUS_PENDING;
+    new_order.order_time   = time(NULL);
+    new_order.is_vip_order = 0;
+
+    orders[order_idx] = new_order;
+    order_count++;
+
+    // 고객 방문 횟수 및 VIP 체크
+    check_and_promote_vip(customer_code, order_idx);
+
+    printf("\n주문이 추가되었습니다. 주문 ID: %d\n", orders[order_idx].id);
+}
+
+// 특정 고객 주문만 조회
+void view_orders(const char* customer_code) {
+    printf("\n[내 주문 조회 - 코드: %s]\n", customer_code);
+    check_and_update_status(); // 상태 자동 업데이트
+    
+    printf("--------------------------------------------------------------------\n");
+    int found = 0;
+
+    for (int i = 0; i < order_count; i++) {
+        if (strcmp(orders[i].customer_code, customer_code) == 0) {
+            found = 1;
+            char time_buf[20];
+            strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
+
+            const char* status_str = get_status_string(orders[i].status);
+            const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
+            const char* priority_info = (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) ? "(최우선)" : "";
+
+            printf("ID: %d | 메뉴: %s | 수량: %d | 상태: %s %s | 시간: %s %s\n",
+                   orders[i].id, orders[i].item_name, orders[i].quantity, status_str, vip_tag, time_buf, priority_info);
+        }
+    }
+    if (!found) {
+        printf("주문 내역이 없습니다.\n");
+    }
+    printf("--------------------------------------------------------------------\n");
+}
+
+// 전체 주문 조회 (직원용, VIP 우선 표시)
+void view_all_orders(void) {
+    printf("\n[전체 주문 조회]\n");
+    
+    check_and_update_status(); // 상태 자동 업데이트
+
+    if (order_count == 0) {
+        printf("전체 주문 내역이 없습니다.\n");
+        return;
+    }
+
+    printf("--------------------------------------------------------------------\n");
+    printf("ID   | 고객코드 | 메뉴 (수량)      | 상태   | 태그   | 주문 시간\n");
+    printf("-----|----------|------------------|--------|--------|--------------------\n");
+
+    // 1. VIP이면서 완료 전 주문
+    for (int i = 0; i < order_count; i++) {
+        if (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
+            char time_buf[20];
+            strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
+            const char* status_str = get_status_string(orders[i].status);
+            printf("%-4d | %-8s | %-12s (%d) | %-6s | [VIP]  | %s (최우선 처리)\n",
+                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
+        }
+    }
+
+    // 2. 일반 주문 (완료 전)
+    for (int i = 0; i < order_count; i++) {
+        if (!orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
+            char time_buf[20];
+            strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
+            const char* status_str = get_status_string(orders[i].status);
+            printf("%-4d | %-8s | %-12s (%d) | %-6s |        | %s\n",
+                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
+        }
+    }
+
+    // 3. 완료된 주문
+    for (int i = 0; i < order_count; i++) {
+        if (orders[i].status == STATUS_COMPLETE) {
+            char time_buf[20];
+            strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
+            const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
+            printf("%-4d | %-8s | %-12s (%d) | 완료   | %-6s | %s\n",
+                   orders[i].id, orders[i].customer_code, orders[i].item_name, orders[i].quantity, vip_tag, time_buf);
+        }
+    }
+    printf("--------------------------------------------------------------------\n");
+}
+
+// 주문 ID로 주문을 완료 상태로 변경
+void mark_order_complete(void) {
+    int order_id;
+    printf("완료할 주문 ID 입력: ");
+    if (scanf("%d", &order_id) != 1) {
+        printf("\n잘못된 입력입니다.\n");
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF);
+        return;
+    }
+    getchar();
+
+    for (int i = 0; i < order_count; i++) {
+        if (orders[i].id == order_id) {
+            if (orders[i].status == STATUS_COMPLETE) {
+                printf("\n이 주문은 이미 완료되었습니다.\n");
+                return;
+            }
+            orders[i].status = STATUS_COMPLETE;
+            save_data();
+            printf("\n주문 ID %d가 완료 처리되었습니다.\n", order_id);
+            return;
+        }
+    }
+    printf("\n해당 주문 ID를 찾을 수 없습니다.\n");
+}
+
+// 모든 주문 데이터 삭제
+void delete_all_orders(void) {
+    char confirm[8];
+    printf("모든 주문을 삭제하면 복구할 수 없습니다. 계속하시겠습니까? (yes/no): ");
+    if (fgets(confirm, sizeof(confirm), stdin) == NULL) {
+        printf("입력 오류로 취소합니다.\n");
+        return;
+    }
+    remove_newline(confirm);
+    if (strcmp(confirm, "yes") == 0 || strcmp(confirm, "y") == 0) {
+        order_count = 0;
+        next_order_id = 1;
+        memset(orders, 0, sizeof(orders));
+        save_data();
+        printf("모든 주문이 삭제되었습니다.\n");
+    } else {
+        printf("삭제가 취소되었습니다.\n");
+    }
+}
+
+// 일정 시간이 지난 주문의 상태를 '준비 중'으로 변경
+void check_and_update_status(void) {
+    time_t current_time = time(NULL);
+    int updated_count = 0;
+
+    for (int i = 0; i < order_count; i++) {
+        if (orders[i].status == STATUS_PENDING) {
+            if (current_time - orders[i].order_time >= PREP_DELAY_SECONDS) {
+                orders[i].status = STATUS_PREPARING;
+                updated_count++;
+            }
+        }
+    }
+
+    if (updated_count > 0) {
+        save_data();
+    }
+}
+
+
+// ============ 메뉴 인터페이스 (직원/고객) ============
+
+// 직원 메뉴
 void staff_menu(void) {
     int choice;
     while (1) {
         printf("\n[직원 메뉴]\n");
         printf("1. 전체 주문 조회 (VIP 최우선 배치)\n");
         printf("2. 주문 완료 처리\n");
-        printf("3. 메뉴 수정하기 (추가/수정/삭제)\n"); // 수정된 항목
-        printf("4. 단골 고객 현황 조회\n");
+        printf("3. 메뉴 수정하기 (추가/수정/삭제)\n");
+        printf("4. 단골 고객 현황 조회 (기능 미구현)\n");
         printf("5. 모든 주문 삭제\n"); 
-        printf("6. 뒤로 가기\n"); // 뒤로 가기 위치 변경
+        printf("6. 뒤로 가기\n");
         printf("선택: ");
         if (scanf("%d", &choice) != 1) {
             int c;
@@ -396,10 +640,9 @@ void staff_menu(void) {
                 mark_order_complete();
                 break;
             case 3:
-                menu_management(); // 메뉴 관리 기능 호출
+                menu_management();
                 break;
             case 4:
-                // 단골 고객 현황 출력 함수가 있으면 호출 (예: print_customers())
                 printf("단골 고객 현황 기능은 구현되어 있지 않거나 별도 함수가 필요합니다.\n");
                 break;
             case 5:
@@ -415,23 +658,25 @@ void staff_menu(void) {
 }
 
 
+// 고객 메뉴 (고객 코드 기준)
 void customer_menu(const char* customer_code) {
     int choice;
     int cust_idx = find_customer_index_by_code(customer_code);
 
     printf("\n[고객 메뉴 - 코드: %s]\n", customer_code);
 
+    // VIP/단골 안내 메시지
     if (cust_idx != -1) {
         if (customers[cust_idx].is_vip) {
             printf("✨ VIP 혜택: 주문이 대기열 최우선으로 배치되어 더 빠르게 배달됩니다. ✨\n");
         } else {
             int needed = VIP - customers[cust_idx].visit_count;
             if (needed > 0) {
-                printf("💡 %d회 더 주문하시면 단골 혜택이 시작됩니다. 💡\n", needed);
+                printf("💡 %d회 더 주문하시면 단골 혜택이 시작됩니다. (현재 %d회 방문) 💡\n", needed, customers[cust_idx].visit_count);
             }
         }
     } else {
-        printf("첫 주문을 환영합니다.\n");
+        printf("첫 주문을 환영합니다. 단골 혜택을 곧 만나보세요!\n"); 
     }
 
     while (1) {
@@ -459,235 +704,5 @@ void customer_menu(const char* customer_code) {
             default:
                 printf("\n잘못된 선택입니다.\n");
         }
-    }
-}
-
-// 주문 추가 (메뉴 ID 선택 방식으로 변경)
-void add_order(const char* customer_code) {
-    if (menu_count == 0) {
-        printf("\n현재 주문 가능한 메뉴가 없습니다. 직원에게 문의하세요.\n");
-        return;
-    }
-
-    print_menu(); // 메뉴 목록 표시
-
-    int selected_menu_id;
-    printf("주문할 메뉴의 ID 입력: ");
-    if (scanf("%d", &selected_menu_id) != 1) {
-        printf("\n잘못된 입력입니다. 주문 취소.\n");
-        int c; while ((c = getchar()) != '\n' && c != EOF);
-        return;
-    }
-    getchar();
-
-    int menu_idx = find_menu_index_by_id(selected_menu_id);
-    if (menu_idx == -1) {
-        printf("\n해당 ID의 메뉴를 찾을 수 없습니다. 주문 취소.\n");
-        return;
-    }
-
-    if (order_count >= MAX_ORDERS) {
-        printf("\n더 이상 주문을 받을 수 없습니다.\n");
-        return;
-    }
-
-    Order new_order;
-    int   order_idx = order_count;
-
-    new_order.id = next_order_id++;
-    strncpy(new_order.customer_code, customer_code, sizeof(new_order.customer_code) - 1);
-    new_order.customer_code[sizeof(new_order.customer_code) - 1] = '\0';
-
-    new_order.menu_id = selected_menu_id;
-    strncpy(new_order.item_name, menu_items[menu_idx].item_name, sizeof(new_order.item_name) - 1);
-    new_order.item_name[sizeof(new_order.item_name) - 1] = '\0';
-    
-    printf("선택 메뉴: %s (%d원)\n", new_order.item_name, menu_items[menu_idx].price);
-
-    printf("수량: ");
-    if (scanf("%d", &new_order.quantity) != 1 || new_order.quantity <= 0) {
-        printf("\n잘못된 수량 입력입니다. 주문 취소.\n");
-        next_order_id--;
-        int c; while ((c = getchar()) != '\n' && c != EOF);
-        return;
-    }
-    getchar();
-
-    new_order.status       = STATUS_PENDING;
-    new_order.order_time   = time(NULL);
-    new_order.is_vip_order = 0;
-
-    orders[order_idx] = new_order;
-    order_count++;
-
-    check_and_promote_vip(customer_code, order_idx);
-
-    save_data();
-
-    printf("\n주문이 추가되었습니다. 주문 ID: %d\n", orders[order_idx].id);
-}
-
-// 내 주문 조회
-void view_orders(const char* customer_code) {
-    printf("\n[내 주문 조회 - 코드: %s]\n", customer_code);
-    check_and_update_status(); 
-    
-    printf("--------------------------------------------------------------------\n");
-    int found = 0;
-
-    for (int i = 0; i < order_count; i++) {
-        if (strcmp(orders[i].customer_code, customer_code) == 0) {
-            found = 1;
-            char time_buf[20];
-            strftime(time_buf, 20, "%H:%M:%S", localtime(&orders[i].order_time));
-
-            const char* status_str;
-            if (orders[i].status == STATUS_PENDING) {
-                status_str = "대기";
-            } else if (orders[i].status == STATUS_PREPARING) {
-                status_str = "준비 중";
-            } else {
-                status_str = "완료";
-            }
-
-            const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
-            const char* priority_info = (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) ? "(최우선)" : "";
-
-            printf("ID: %d | 메뉴: %s | 수량: %d | 상태: %s %s | 시간: %s %s\n",
-                   orders[i].id, orders[i].item_name, orders[i].quantity, status_str, vip_tag, time_buf, priority_info);
-        }
-    }
-    if (!found) {
-        printf("주문 내역이 없습니다.\n");
-    }
-    printf("--------------------------------------------------------------------\n");
-}
-
-// 전체 주문 조회 (직원용)
-void view_all_orders(void) {
-    printf("\n[전체 주문 조회]\n");
-    
-    check_and_update_status(); 
-
-    if (order_count == 0) {
-        printf("전체 주문 내역이 없습니다.\n");
-        return;
-    }
-
-    printf("--------------------------------------------------------------------\n");
-    printf("ID   | 고객코드 | 메뉴 (수량)      | 상태   | 태그   | 주문 시간\n");
-    printf("-----|----------|------------------|--------|--------|--------------------\n");
-
-    // 1. VIP 대기 및 준비 중 주문 (최우선)
-    for (int i = 0; i < order_count; i++) {
-        // VIP 주문 중 완료되지 않은 주문
-        if (orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
-            char time_buf[20];
-            strftime(time_buf, 20, "%H:%M:%S",
-                     localtime(&orders[i].order_time));
-            
-            const char* status_str = get_status_string(orders[i].status);
-            
-            printf("%-4d | %-8s | %-12s (%d) | %-6s | [VIP]  | %s (최우선 처리)\n",
-                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
-        }
-    }
-
-    // 2. 일반 대기 및 준비 중 주문
-    for (int i = 0; i < order_count; i++) {
-        // 일반 고객 주문 중 완료되지 않은 주문
-        if (!orders[i].is_vip_order && orders[i].status != STATUS_COMPLETE) {
-            char time_buf[20];
-            strftime(time_buf, 20, "%H:%M:%S",
-                     localtime(&orders[i].order_time));
-            
-            const char* status_str = get_status_string(orders[i].status);
-            
-            printf("%-4d | %-8s | %-12s (%d) | %-6s |        | %s\n",
-                   orders[i].id,orders[i].customer_code,orders[i].item_name,orders[i].quantity,status_str,time_buf);
-        }
-    }
-
-    // 3. 완료된 주문
-    for (int i = 0; i < order_count; i++) {
-        if (orders[i].status == STATUS_COMPLETE) {
-            char time_buf[20];
-            strftime(time_buf, 20, "%H:%M:%S",
-                     localtime(&orders[i].order_time));
-            const char* vip_tag = orders[i].is_vip_order ? "[VIP]" : "";
-            printf("%-4d | %-8s | %-12s (%d) | 완료   | %-6s | %s\n",
-                   orders[i].id, orders[i].customer_code, orders[i].item_name, orders[i].quantity, vip_tag, time_buf);
-        }
-    }
-    printf("--------------------------------------------------------------------\n");
-}
-
-void mark_order_complete(void) {
-    int order_id;
-    printf("완료할 주문 ID 입력: ");
-    if (scanf("%d", &order_id) != 1) {
-        printf("\n잘못된 입력입니다.\n");
-        int c;
-        while ((c = getchar()) != '\n' && c != EOF);
-        return;
-    }
-    getchar();
-
-    for (int i = 0; i < order_count; i++) {
-        if (orders[i].id == order_id) {
-            if (orders[i].status == STATUS_COMPLETE) {
-                printf("\n이 주문은 이미 완료되었습니다.\n");
-                return;
-            }
-            orders[i].status = STATUS_COMPLETE;
-            save_data();
-            printf("\n주문 ID %d가 완료 처리되었습니다.\n", order_id);
-            return;
-        }
-    }
-    printf("\n해당 주문 ID를 찾을 수 없습니다.\n");
-}
-
-// 모든 주문 삭제
-void delete_all_orders(void) {
-    char confirm[8];
-    printf("모든 주문을 삭제하면 복구할 수 없습니다. 계속하시겠습니까? (yes/no): ");
-    if (fgets(confirm, sizeof(confirm), stdin) == NULL) {
-        printf("입력 오류로 취소합니다.\n");
-        return;
-    }
-    remove_newline(confirm);
-    if (strcmp(confirm, "yes") == 0 || strcmp(confirm, "y") == 0) {
-        // 주문 목록 초기화
-        order_count = 0;
-        next_order_id = 1;
-        memset(orders, 0, sizeof(orders));
-        save_data();
-        printf("모든 주문이 삭제되었습니다.\n");
-    } else {
-        printf("삭제가 취소되었습니다.\n");
-    }
-}
-
-void check_and_update_status(void) {
-    time_t current_time = time(NULL);
-    int updated_count = 0;
-
-    for (int i = 0; i < order_count; i++) {
-        // 1. 대기(Pending) 상태인지 확인
-        if (orders[i].status == STATUS_PENDING) {
-            
-            // 2. 주문 시각으로부터 30초가 경과했는지 확인
-            if (current_time - orders[i].order_time >= PREP_DELAY_SECONDS) {
-                
-                // 3. 상태를 준비 중(Preparing)으로 변경
-                orders[i].status = STATUS_PREPARING;
-                updated_count++;
-            }
-        }
-    }
-
-    if (updated_count > 0) {
-        save_data();
     }
 }
