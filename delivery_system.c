@@ -609,6 +609,19 @@ void check_and_update_status(void) {
     }
 }
 
+void view_vip_customers(void) {
+    printf("\n[단골 고객 현황]\n");
+    printf("고객 코드       | 방문 횟수 | VIP 여부\n");
+    printf("----------------|-----------|---------\n");
+    for (int i = 0; i < active_customer_count; i++) {
+        printf("%-15s | %-9d | %s\n",
+               customers[i].customer_code,
+               customers[i].visit_count,
+               customers[i].is_vip ? "예" : "아니오");
+    }
+    printf("----------------|-----------|---------\n");
+}
+
 
 // ============ 메뉴 인터페이스 (직원/고객) ============
 
@@ -620,7 +633,7 @@ void staff_menu(void) {
         printf("1. 전체 주문 조회 (VIP 최우선 배치)\n");
         printf("2. 주문 완료 처리\n");
         printf("3. 메뉴 수정하기 (추가/수정/삭제)\n");
-        printf("4. 단골 고객 현황 조회 (기능 미구현)\n");
+        printf("4. 단골 고객 현황 조회 \n");
         printf("5. 모든 주문 삭제\n"); 
         printf("6. 뒤로 가기\n");
         printf("선택: ");
@@ -643,7 +656,7 @@ void staff_menu(void) {
                 menu_management();
                 break;
             case 4:
-                printf("단골 고객 현황 기능은 구현되어 있지 않거나 별도 함수가 필요합니다.\n");
+                view_vip_customers();
                 break;
             case 5:
                 delete_all_orders();
